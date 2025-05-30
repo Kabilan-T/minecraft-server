@@ -16,6 +16,45 @@ BACKUP_ITEMS=(
     "allowlist.json"
 )
 
+send_command_and_confirm_output() {
+    local cmd="$1"
+    local confirm_message="$2"
+    local max_attempts=10
+    local sleep_interval=1
+    local success=false
+
+    # Capture tmux output before sending the command
+    local before_output
+    before_output=$(tmux capture-pane -t "$SESSION_NAME" -p)
+
+    # Send the command to the tmux session
+    tmux send-keys -t "$SESSION_NAME" "$cmd" C-m
+
+    echo "Waiting for confirmation of '$cmd'..."
+    for i in $(seq 1 "$max_attempts"); do
+        sleep "$sleep_interval"
+
+        # Capture new output after command
+        local after_output
+        after_output=$(tmux capture-pane -t "$SESSION_NAME" -p)
+
+        # Get the diff (new lines only)
+        local new_lines
+        new_lines=$(diff <(echo "$before_output") <(echo "$after_output") | sed '1,2d' | grep '^> ' | cut -c3-)
+
+        if echo "$new_lines" | grep -q "$confirm_message"; then
+            echo "Confirmed: $confirm_message"
+            success=true
+            break
+        fi
+    done
+
+    if [ "$success" = false ]; then
+        echo "ERROR: '$cmd' did not result in expected output ('$confirm_message')"
+        exit 1
+    fi
+}
+
 # === Check if tmux session exists ===
 if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
     SERVER_RUNNING=true
@@ -28,10 +67,10 @@ fi
 # === Pause saving ===
 if [ "$SERVER_RUNNING" = true ]; then
     echo "Sending 'save hold' to Bedrock server"
-    tmux send-keys -t "$SESSION_NAME" "save hold" C-m
-    sleep 5
-    tmux send-keys -t "$SESSION_NAME" "save query" C-m
-    sleep 5
+    send_command_and_confirm_output "save hold" "Saving"
+    echo "Sending 'save query' to Bedrock server"
+    send_command_and_confirm_output "save query" "Data saved"
+
 fi
 
 # === Check backup items  ===
@@ -70,7 +109,7 @@ if [ "$empty_backup" = true ]; then
     # Resume saving if server was paused
     if [ "$SERVER_RUNNING" = true ]; then
         echo "Sending 'save resume' to Bedrock server"
-        tmux send-keys -t "$SESSION_NAME" "save resume" C-m
+        send_command_and_confirm_output "save resume" "Changes to the world are resumed"
     fi
     exit 0
 fi
@@ -102,7 +141,7 @@ fi
 # === Resume saving ===
 if [ "$SERVER_RUNNING" = true ]; then
     echo "Sending 'save resume' to Bedrock server"
-    tmux send-keys -t "$SESSION_NAME" "save resume" C-m
+    send_command_and_confirm_output "save resume" "Changes to the world are resumed"
 fi
 
 
