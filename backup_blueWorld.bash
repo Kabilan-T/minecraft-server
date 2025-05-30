@@ -51,6 +51,7 @@ send_command_and_confirm_output() {
 
     if [ "$success" = false ]; then
         echo "ERROR: '$cmd' did not result in expected output ('$confirm_message')"
+        echo "command output: $new_lines"
         exit 1
     fi
 }
