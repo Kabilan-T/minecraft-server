@@ -1,0 +1,4 @@
+bedrock-server/*
+backup/*
+*.log
+
